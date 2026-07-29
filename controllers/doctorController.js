@@ -54,6 +54,7 @@ const getDoctors = async (req, res, next) => {
     next(error);
   }
 };
+
 const getSingleDoctor = async (req, res, next) => {
   try {
     const { id } = req.params;
