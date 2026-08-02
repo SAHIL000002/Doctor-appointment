@@ -13,6 +13,7 @@ const patientSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    
     email: {
       type: String,
       lowercase: true,
