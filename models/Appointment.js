@@ -16,7 +16,7 @@ const appointmentSchema = new mongoose.Schema({
         ref : "Patient",
         required : true
     },
-    appointmentDate : {
+    appointmentDate : { 
         type : Date,
         required: true
     },
@@ -63,4 +63,4 @@ const appointmentSchema = new mongoose.Schema({
     timestamps : true
 });
 
-module.exports = mongoose.model("Appointment" ,appointmentSchema)
+module.exports = mongoose.model("Appointment" ,appointmentSchema)s

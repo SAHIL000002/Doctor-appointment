@@ -242,14 +242,154 @@ const getAvailableSlotForDoctor = async (req, res, next) => {
     }
 
     const selectedDate = normalizeDate(date);
-    const selectedDay = getDayName(selectedDate)
-    if(!doctor.availableDays.includes(selectedDay)){
+    const selectedDay = getDayName(selectedDate);
+    if (!doctor.availableDays.includes(selectedDay)) {
       return res.status(400).json({
-        success : false,
-        message : `doctor is unavailable on ${selectedDay}`,
-        data : []
-      })
+        success: false,
+        message: `doctor is unavailable on ${selectedDay}`,
+        data: [],
+      });
     }
+    const bokedAppointments = await Appointment.find({
+      doctor: doctor._id,
+      appointmentDate: selectedDate,
+      status: {
+        $ne: "Cancelled",
+      },
+    }).select("appointmentTime");
+    const bookedTimes = bookedAppointmeents.map(
+      (appointment) => appointment.appointmentTime,
+    );
+    const slots = [];
+    let [startHour, startMinute] = doctor.startTime.spilt(":").map(Number);
+
+    let currentMinute = startHour * 60 + startMinute;
+    let endMinute = endHour * 60 + endMinute;
+
+    while (currentMinute < endMinute) {
+      const hour = Math.floor(currentMinute / 60);
+      const minute = currentMinute % 60;
+      const formattedTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+
+      slots.push({
+        time: formattedTime,
+        available: !bookedTimes.includes(formattedTime),
+      });
+      currentMinute += doctor.slotDuration;
+    }
+
+    res.json({
+      success: true,
+      doctor: {
+        _id: doctorId,
+        name: doctor.name,
+        slotDuration: doctor.slotDuration,
+      },
+      date: selectedDate,
+      data: slots,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getSingleAppointmentDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const appointment = await Appointment.findById(id)
+      .populate("doctor", "name specialization phone consultationFee")
+      .populate("patient", "name age phone gender");
+
+    if (!appointment) {
+      return res.status(403).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+    res.json({
+      success: true,
+      data: appointment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateAppointmentStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const allowedStatuses = [
+      "Pending",
+      "Confirmed",
+      "Cecked-in",
+      "Completed",
+      "Cancelled",
+    ];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "invalid appointment status",
+      });
+    }
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(400).json({
+        success: false,
+        message: "appointment not found",
+      });
+    }
+    appointment.status = status;
+    await appointment.save();
+
+    if (status === "Completed") {
+      await Patient.findByIdAndUpdate(appointment.patient, {
+        $inc: {
+          totalVisits: 1,
+        },
+        lastVisit: new Date(),
+      });
+    }
+
+    const updatedAppointment = await Appointment.find(req.params.id)
+      .populate("doctor", "name specialization")
+      .populate("patient", "name phone totalVisits");
+
+    res.json({
+      success: true,
+      message: `Appointment Status changed to ${status}`,
+      data: updatedAppointment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updatePaymentStatus = async (req, res, next) => {
+  try {
+    const { paymentStatus } = req.body;
+    const allowedStatuses = ["Pending", "Paid", "Refunded"];
+    if (!allowedStatuses.includes(paymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Payment Status",
+      });
+    }
+    const appointment = await Appointment.findByIdAndUpdate(
+      req.params.id,
+      { paymentStatus },
+      { new: true, runValidators: true },
+    );
+    if (!appointment) {
+      return res.status(403).json({
+        success: false,
+        message: "Appointment Not Found",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Payment Status Updated",
+      data: appointment,
+    });
   } catch (error) {
     next(error);
   }
